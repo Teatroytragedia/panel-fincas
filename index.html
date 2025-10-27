@@ -41,6 +41,9 @@
       justify-items: center;
     }
     canvas {
+      width: 100%;
+      max-width: 300px;
+      height: 250px !important;
       background: white;
       border-radius: 16px;
       padding: 10px;
@@ -48,7 +51,7 @@
       transition: all 0.3s ease;
     }
     canvas:hover {
-      transform: scale(1.02);
+      transform: scale(1.03);
     }
     #estado {
       color: #007700;
@@ -80,6 +83,7 @@
 
   <script>
     let datos = [];
+    let graficos = {};
 
     document.getElementById('inputExcel').addEventListener('change', leerExcel);
 
@@ -91,6 +95,15 @@
         const libro = XLSX.read(datosBinarios, { type: 'array' });
         const hoja = libro.Sheets[libro.SheetNames[0]];
         datos = XLSX.utils.sheet_to_json(hoja);
+
+        // Limpieza de espacios en encabezados
+        datos = datos.map(fila => {
+          const limpio = {};
+          Object.keys(fila).forEach(k => {
+            limpio[k.trim().toUpperCase()] = fila[k];
+          });
+          return limpio;
+        });
 
         document.getElementById("estado").textContent = "✅ DATOS CARGADOS CORRECTAMENTE";
         inicializarFiltros();
@@ -110,7 +123,7 @@
     function llenarFiltro(idFiltro, campo) {
       const filtro = document.getElementById(idFiltro);
       const valores = [...new Set(datos.map(d => (d[campo] || '').toString().trim()))];
-      filtro.innerHTML = '<option value="Todos">' + campo + ' (TODOS)</option>' +
+      filtro.innerHTML = `<option value="Todos">${campo} (TODOS)</option>` +
                          valores.map(v => `<option value="${v}">${v}</option>`).join('');
       filtro.addEventListener('change', actualizarGraficos);
     }
@@ -133,14 +146,11 @@
 
     function actualizarGraficos() {
       const datosFiltrados = filtrarDatos();
-
-      crearGraficoBarras('graficoFincas', 'FINCA', 'Fincas', datosFiltrados);
-      crearGraficoBarras('graficoMicroorganismos', 'MICROORGANISMO', 'Microorganismos', datosFiltrados);
-      crearGraficoBarras('graficoFases', 'FASE', 'Fases', datosFiltrados);
-      crearGraficoPastel('graficoPastel', 'TIPO', 'Distribución: Hongos y Bacterias', datosFiltrados);
+      crearGraficoBarras('graficoFincas', 'FINCA', 'Distribución por Finca', datosFiltrados);
+      crearGraficoBarras('graficoMicroorganismos', 'MICROORGANISMO', 'Tipos de Microorganismos', datosFiltrados);
+      crearGraficoBarras('graficoFases', 'FASE', 'Fases del Estudio', datosFiltrados);
+      crearGraficoPastel('graficoPastel', 'TIPO', 'Benéficos vs Patógenos', datosFiltrados);
     }
-
-    let graficos = {};
 
     function crearGraficoBarras(id, campo, titulo, datos) {
       const ctx = document.getElementById(id).getContext('2d');
@@ -168,7 +178,10 @@
         options: {
           responsive: true,
           plugins: { legend: { display: false } },
-          animation: { duration: 700 }
+          animation: { duration: 700 },
+          scales: {
+            y: { beginAtZero: true }
+          }
         }
       });
     }
