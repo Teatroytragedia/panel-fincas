@@ -4,246 +4,213 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PANEL ANALÍTICO DE MICROORGANISMOS – FINCAS 2024–2025</title>
-
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
   <style>
     body {
-      font-family: sans-serif;
-      background-color: #f5f5f5;
+      font-family: Arial, sans-serif;
+      background-color: #f9f9ff;
+      text-align: center;
       margin: 0;
-      padding: 0;
-      text-align: center;
-      color: #222;
+      padding: 20px;
     }
-
     h1 {
-      color: #003366;
-      text-align: center;
-      margin-top: 20px;
-      text-transform: uppercase;
-      opacity: 0;
-      animation: fadeIn 1.5s ease forwards;
+      color: #004aad;
+      font-size: 24px;
+      margin-bottom: 15px;
     }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(-10px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
     #status {
-      color: #007bff;
       font-weight: bold;
-      margin: 10px 0 30px 0;
-      text-transform: uppercase;
-      opacity: 0;
-      animation: fadeIn 2s ease forwards;
-      animation-delay: 0.8s;
+      margin-bottom: 10px;
+      color: green;
     }
-
-    .filters {
+    select, input[type="file"] {
+      margin: 5px;
+      padding: 5px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    canvas {
+      max-width: 400px;
+      max-height: 250px;
+      margin: 15px;
+    }
+    .charts {
       display: flex;
       flex-wrap: wrap;
       justify-content: center;
-      gap: 10px;
-      margin-bottom: 20px;
-      opacity: 0;
-      animation: fadeIn 2s ease forwards;
-      animation-delay: 1s;
-    }
-
-    select {
-      padding: 8px 12px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      font-size: 14px;
-      cursor: pointer;
-    }
-
-    .chart-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-      gap: 20px;
-      padding: 0 20px 40px 20px;
-      opacity: 0;
-      animation: fadeIn 2s ease forwards;
-      animation-delay: 1.2s;
-    }
-
-    .chart-container {
-      background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-      padding: 15px;
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
-    }
-
-    .chart-container:hover {
-      transform: scale(1.02);
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
-    }
-
-    canvas {
-      height: 250px !important;
-    }
-
-    #fileInput {
-      margin-bottom: 20px;
     }
   </style>
 </head>
 
 <body>
   <h1>PANEL ANALÍTICO DE MICROORGANISMOS – FINCAS 2024–2025</h1>
-  <div id="status">✅ DATOS CARGADOS CORRECTAMENTE</div>
+  <p id="status">Seleccione un archivo Excel para cargar los datos.</p>
 
-  <input type="file" id="fileInput" accept=".xlsx, .xls" />
+  <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" />
+  <br />
+  <select id="fincaSelect"></select>
+  <select id="microSelect"></select>
+  <select id="nombreSelect"></select>
+  <select id="faseSelect"></select>
+  <select id="tipoSelect"></select>
 
-  <div class="filters">
-    <select id="filterFinca"><option value="">FINCA</option></select>
-    <select id="filterMicro"><option value="">MICROORGANISMO</option></select>
-    <select id="filterNombre"><option value="">NOMBRE</option></select>
-    <select id="filterFase"><option value="">FASE</option></select>
-    <select id="filterTipo"><option value="">TIPO</option></select>
-  </div>
-
-  <div class="chart-grid">
-    <div class="chart-container"><canvas id="chart1"></canvas></div>
-    <div class="chart-container"><canvas id="chart2"></canvas></div>
-    <div class="chart-container"><canvas id="chart3"></canvas></div>
-    <div class="chart-container"><canvas id="chart4"></canvas></div>
-    <div class="chart-container"><canvas id="chart5"></canvas></div>
-    <div class="chart-container"><canvas id="chart6"></canvas></div>
-    <div class="chart-container"><canvas id="chart7"></canvas></div>
-    <div class="chart-container"><canvas id="chart8"></canvas></div>
+  <div class="charts">
+    <canvas id="barChart"></canvas>
+    <canvas id="lineChart"></canvas>
+    <canvas id="pieChart"></canvas>
   </div>
 
   <script>
-    let jsonData = [];
-    const charts = [];
+    let rawData = [];
+    let barChart, lineChart, pieChart;
 
-    document.getElementById("fileInput").addEventListener("change", handleFile);
-
-    async function handleFile(event) {
+    document.getElementById("fileInput").addEventListener("change", function (event) {
       const file = event.target.files[0];
-      if (!file) return;
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: "array" });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          rawData = XLSX.utils.sheet_to_json(firstSheet);
 
-      populateFilters();
-      updateCharts();
+          document.getElementById("status").textContent = "✅ DATOS CARGADOS CORRECTAMENTE";
+          document.getElementById("status").style.color = "green";
+
+          fillSelect("fincaSelect", rawData.map(r => r.FINCA));
+          fillSelect("microSelect", rawData.map(r => r.MICROORGANISMO));
+          fillSelect("nombreSelect", rawData.map(r => r.NOMBRE));
+          fillSelect("faseSelect", rawData.map(r => r.FASE));
+          fillSelect("tipoSelect", rawData.map(r => r.TIPO));
+
+          updateCharts(rawData);
+        };
+        reader.readAsArrayBuffer(file);
+      }
+    });
+
+    // 🔹 Llenar selects con opción "TODOS"
+    function fillSelect(selectId, values) {
+      const select = document.getElementById(selectId);
+      select.innerHTML = "";
+      const allOption = document.createElement("option");
+      allOption.value = "Todos";
+      allOption.textContent = "TODOS";
+      select.appendChild(allOption);
+
+      [...new Set(values.filter(v => v && v.trim() !== ""))]
+        .sort()
+        .forEach(v => {
+          const opt = document.createElement("option");
+          opt.value = v;
+          opt.textContent = v.toUpperCase();
+          select.appendChild(opt);
+        });
     }
 
-    function populateFilters() {
-      const fields = ["FINCA", "MICROORGANISMO", "NOMBRE", "FASE", "TIPO"];
-      fields.forEach(field => {
-        const select = document.getElementById("filter" + field.charAt(0) + field.slice(1).toLowerCase());
-        const values = [...new Set(jsonData.map(d => d[field]))];
-        select.innerHTML = `<option value="">${field}</option>`;
-        values.forEach(v => select.innerHTML += `<option value="${v}">${v}</option>`);
-        select.onchange = updateCharts;
-      });
-    }
+    function getFilteredData() {
+      const finca = document.getElementById("fincaSelect").value;
+      const micro = document.getElementById("microSelect").value;
+      const nombre = document.getElementById("nombreSelect").value;
+      const fase = document.getElementById("faseSelect").value;
+      const tipo = document.getElementById("tipoSelect").value;
 
-    function filterData() {
-      const finca = document.getElementById("filterFinca").value;
-      const micro = document.getElementById("filterMicro").value;
-      const nombre = document.getElementById("filterNombre").value;
-      const fase = document.getElementById("filterFase").value;
-      const tipo = document.getElementById("filterTipo").value;
-
-      return jsonData.filter(d =>
-        (!finca || d.FINCA === finca) &&
-        (!micro || d.MICROORGANISMO === micro) &&
-        (!nombre || d.NOMBRE === nombre) &&
-        (!fase || d.FASE === fase) &&
-        (!tipo || d.TIPO === tipo)
+      return rawData.filter(r =>
+        (finca === "Todos" || r.FINCA === finca) &&
+        (micro === "Todos" || r.MICROORGANISMO === micro) &&
+        (nombre === "Todos" || r.NOMBRE === nombre) &&
+        (fase === "Todos" || r.FASE === fase) &&
+        (tipo === "Todos" || r.TIPO === tipo)
       );
     }
 
-    function updateCharts() {
-      const data = filterData();
-      const ctxs = [...document.querySelectorAll("canvas")];
-      charts.forEach(c => c.destroy());
-      charts.length = 0;
-
-      if (data.length === 0) return;
-
-      const fincaValues = countBy(data, "FINCA");
-      const faseValues = countBy(data, "FASE");
-      const microValues = countBy(data, "MICROORGANISMO");
-      const tipoValues = countBy(data, "TIPO");
-      const nombreValues = countBy(data, "NOMBRE");
-
-      const chartData = [
-        { ctx: ctxs[0], type: "bar", label: "FINCAS", data: fincaValues },
-        { ctx: ctxs[1], type: "line", label: "FASES", data: faseValues },
-        { ctx: ctxs[2], type: "bar", label: "MICROORGANISMOS", data: microValues },
-        { ctx: ctxs[3], type: "line", label: "TIPOS", data: tipoValues },
-        { ctx: ctxs[4], type: "bar", label: "NOMBRES", data: nombreValues },
-        { ctx: ctxs[5], type: "pie", label: "FINCAS", data: fincaValues },
-        { ctx: ctxs[6], type: "pie", label: "MICROORGANISMOS", data: microValues },
-        { ctx: ctxs[7], type: "pie", label: "TIPOS", data: tipoValues },
-      ];
-
-      chartData.forEach(item => {
-        charts.push(
-          new Chart(item.ctx, {
-            type: item.type,
-            data: {
-              labels: Object.keys(item.data),
-              datasets: [{
-                label: item.label,
-                data: Object.values(item.data),
-                backgroundColor: generateColors(Object.keys(item.data).length),
-                borderWidth: 1,
-              }],
-            },
-            options: {
-              responsive: true,
-              plugins: {
-                legend: { position: "bottom" },
-                tooltip: {
-                  callbacks: {
-                    label: function (context) {
-                      const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                      const val = context.raw;
-                      const pct = ((val / total) * 100).toFixed(1);
-                      return `${context.label}: ${val} (${pct}%)`;
-                    }
-                  }
-                },
-                datalabels: {
-                  color: "#fff",
-                  display: context => context.chart.config.type === "pie",
-                  formatter: (value, ctx) => {
-                    const total = ctx.chart._metasets[0].total;
-                    const pct = ((value / total) * 100).toFixed(1);
-                    return `${pct}%`;
-                  }
-                }
-              },
-              scales: item.type !== "pie" ? { y: { beginAtZero: true } } : {}
-            }
-          })
-        );
+    ["fincaSelect", "microSelect", "nombreSelect", "faseSelect", "tipoSelect"].forEach(id => {
+      document.getElementById(id).addEventListener("change", () => {
+        updateCharts(getFilteredData());
       });
-    }
+    });
 
-    function countBy(arr, key) {
-      return arr.reduce((acc, obj) => {
-        acc[obj[key]] = (acc[obj[key]] || 0) + 1;
-        return acc;
-      }, {});
-    }
+    // 🔹 Actualizar gráficos
+    function updateCharts(data) {
+      const fincaCount = {};
+      const tipoCount = {};
+      const faseCount = {};
 
-    function generateColors(n) {
-      const colors = ["#4e79a7","#f28e2b","#e15759","#76b7b2","#59a14f","#edc948","#b07aa1","#ff9da7","#9c755f","#bab0ab"];
-      return Array.from({length: n}, (_, i) => colors[i % colors.length]);
+      data.forEach(r => {
+        fincaCount[r.FINCA] = (fincaCount[r.FINCA] || 0) + 1;
+        tipoCount[r.TIPO] = (tipoCount[r.TIPO] || 0) + 1;
+        faseCount[r.FASE] = (faseCount[r.FASE] || 0) + 1;
+      });
+
+      const fincaLabels = Object.keys(fincaCount);
+      const fincaValues = Object.values(fincaCount);
+      const tipoLabels = Object.keys(tipoCount);
+      const tipoValues = Object.values(tipoCount);
+      const faseLabels = Object.keys(faseCount);
+      const faseValues = Object.values(faseCount);
+
+      if (barChart) barChart.destroy();
+      if (lineChart) lineChart.destroy();
+      if (pieChart) pieChart.destroy();
+
+      const ctxBar = document.getElementById("barChart");
+      const ctxLine = document.getElementById("lineChart");
+      const ctxPie = document.getElementById("pieChart");
+
+      barChart = new Chart(ctxBar, {
+        type: "bar",
+        data: {
+          labels: fincaLabels,
+          datasets: [{
+            label: "FINCAS",
+            data: fincaValues,
+            backgroundColor: "#004aad"
+          }]
+        },
+        options: {
+          plugins: { legend: { display: false } }
+        }
+      });
+
+      lineChart = new Chart(ctxLine, {
+        type: "line",
+        data: {
+          labels: faseLabels,
+          datasets: [{
+            label: "FASES",
+            data: faseValues,
+            borderColor: "#004aad",
+            tension: 0.3
+          }]
+        }
+      });
+
+      pieChart = new Chart(ctxPie, {
+        type: "pie",
+        data: {
+          labels: tipoLabels,
+          datasets: [{
+            data: tipoValues,
+            backgroundColor: ["#007bff", "#ff9933"]
+          }]
+        },
+        options: {
+          plugins: {
+            legend: { position: "bottom" },
+            tooltip: {
+              callbacks: {
+                label: function (context) {
+                  const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                  const value = context.raw;
+                  const percentage = ((value / total) * 100).toFixed(1);
+                  return `${context.label}: ${percentage}%`;
+                }
+              }
+            }
+          }
+        }
+      });
     }
   </script>
 </body>
