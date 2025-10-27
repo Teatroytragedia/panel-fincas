@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PANEL ANALÍTICO DE MICROORGANISMOS – FINCAS 2024–2025</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <style>
+    body {
+      font-family: sans-serif;
+      background-color: #f5f5f5;
+      margin: 0;
+      padding: 0;
+      text-align: center;
+      color: #222;
+    }
+
+    h1 {
+      color: #003366;
+      text-align: center;
+      margin-top: 20px;
+      text-transform: uppercase;
+      opacity: 0;
+      animation: fadeIn 1.5s ease forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    #status {
+      color: #007bff;
+      font-weight: bold;
+      margin: 10px 0 30px 0;
+      text-transform: uppercase;
+      opacity: 0;
+      animation: fadeIn 2s ease forwards;
+      animation-delay: 0.8s;
+    }
+
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+      opacity: 0;
+      animation: fadeIn 2s ease forwards;
+      animation-delay: 1s;
+    }
+
+    select {
+      padding: 8px 12px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 20px;
+      padding: 0 20px 40px 20px;
+      opacity: 0;
+      animation: fadeIn 2s ease forwards;
+      animation-delay: 1.2s;
+    }
+
+    .chart-container {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      padding: 15px;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .chart-container:hover {
+      transform: scale(1.02);
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+    }
+
+    canvas {
+      height: 250px !important;
+    }
+
+    #fileInput {
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>PANEL ANALÍTICO DE MICROORGANISMOS – FINCAS 2024–2025</h1>
+  <div id="status">✅ DATOS CARGADOS CORRECTAMENTE</div>
+
+  <input type="file" id="fileInput" accept=".xlsx, .xls" />
+
+  <div class="filters">
+    <select id="filterFinca"><option value="">FINCA</option></select>
+    <select id="filterMicro"><option value="">MICROORGANISMO</option></select>
+    <select id="filterNombre"><option value="">NOMBRE</option></select>
+    <select id="filterFase"><option value="">FASE</option></select>
+    <select id="filterTipo"><option value="">TIPO</option></select>
+  </div>
+
+  <div class="chart-grid">
+    <div class="chart-container"><canvas id="chart1"></canvas></div>
+    <div class="chart-container"><canvas id="chart2"></canvas></div>
+    <div class="chart-container"><canvas id="chart3"></canvas></div>
+    <div class="chart-container"><canvas id="chart4"></canvas></div>
+    <div class="chart-container"><canvas id="chart5"></canvas></div>
+    <div class="chart-container"><canvas id="chart6"></canvas></div>
+    <div class="chart-container"><canvas id="chart7"></canvas></div>
+    <div class="chart-container"><canvas id="chart8"></canvas></div>
+  </div>
+
+  <script>
+    let jsonData = [];
+    const charts = [];
+
+    document.getElementById("fileInput").addEventListener("change", handleFile);
+
+    async function handleFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+
+      populateFilters();
+      updateCharts();
+    }
+
+    function populateFilters() {
+      const fields = ["FINCA", "MICROORGANISMO", "NOMBRE", "FASE", "TIPO"];
+      fields.forEach(field => {
+        const select = document.getElementById("filter" + field.charAt(0) + field.slice(1).toLowerCase());
+        const values = [...new Set(jsonData.map(d => d[field]))];
+        select.innerHTML = `<option value="">${field}</option>`;
+        values.forEach(v => select.innerHTML += `<option value="${v}">${v}</option>`);
+        select.onchange = updateCharts;
+      });
+    }
+
+    function filterData() {
+      const finca = document.getElementById("filterFinca").value;
+      const micro = document.getElementById("filterMicro").value;
+      const nombre = document.getElementById("filterNombre").value;
+      const fase = document.getElementById("filterFase").value;
+      const tipo = document.getElementById("filterTipo").value;
+
+      return jsonData.filter(d =>
+        (!finca || d.FINCA === finca) &&
+        (!micro || d.MICROORGANISMO === micro) &&
+        (!nombre || d.NOMBRE === nombre) &&
+        (!fase || d.FASE === fase) &&
+        (!tipo || d.TIPO === tipo)
+      );
+    }
+
+    function updateCharts() {
+      const data = filterData();
+      const ctxs = [...document.querySelectorAll("canvas")];
+      charts.forEach(c => c.destroy());
+      charts.length = 0;
+
+      if (data.length === 0) return;
+
+      const fincaValues = countBy(data, "FINCA");
+      const faseValues = countBy(data, "FASE");
+      const microValues = countBy(data, "MICROORGANISMO");
+      const tipoValues = countBy(data, "TIPO");
+      const nombreValues = countBy(data, "NOMBRE");
+
+      const chartData = [
+        { ctx: ctxs[0], type: "bar", label: "FINCAS", data: fincaValues },
+        { ctx: ctxs[1], type: "line", label: "FASES", data: faseValues },
+        { ctx: ctxs[2], type: "bar", label: "MICROORGANISMOS", data: microValues },
+        { ctx: ctxs[3], type: "line", label: "TIPOS", data: tipoValues },
+        { ctx: ctxs[4], type: "bar", label: "NOMBRES", data: nombreValues },
+        { ctx: ctxs[5], type: "pie", label: "FINCAS", data: fincaValues },
+        { ctx: ctxs[6], type: "pie", label: "MICROORGANISMOS", data: microValues },
+        { ctx: ctxs[7], type: "pie", label: "TIPOS", data: tipoValues },
+      ];
+
+      chartData.forEach(item => {
+        charts.push(
+          new Chart(item.ctx, {
+            type: item.type,
+            data: {
+              labels: Object.keys(item.data),
+              datasets: [{
+                label: item.label,
+                data: Object.values(item.data),
+                backgroundColor: generateColors(Object.keys(item.data).length),
+                borderWidth: 1,
+              }],
+            },
+            options: {
+              responsive: true,
+              plugins: {
+                legend: { position: "bottom" },
+                tooltip: {
+                  callbacks: {
+                    label: function (context) {
+                      const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                      const val = context.raw;
+                      const pct = ((val / total) * 100).toFixed(1);
+                      return `${context.label}: ${val} (${pct}%)`;
+                    }
+                  }
+                },
+                datalabels: {
+                  color: "#fff",
+                  display: context => context.chart.config.type === "pie",
+                  formatter: (value, ctx) => {
+                    const total = ctx.chart._metasets[0].total;
+                    const pct = ((value / total) * 100).toFixed(1);
+                    return `${pct}%`;
+                  }
+                }
+              },
+              scales: item.type !== "pie" ? { y: { beginAtZero: true } } : {}
+            }
+          })
+        );
+      });
+    }
+
+    function countBy(arr, key) {
+      return arr.reduce((acc, obj) => {
+        acc[obj[key]] = (acc[obj[key]] || 0) + 1;
+        return acc;
+      }, {});
+    }
+
+    function generateColors(n) {
+      const colors = ["#4e79a7","#f28e2b","#e15759","#76b7b2","#59a14f","#edc948","#b07aa1","#ff9da7","#9c755f","#bab0ab"];
+      return Array.from({length: n}, (_, i) => colors[i % colors.length]);
+    }
+  </script>
+</body>
+</html>
